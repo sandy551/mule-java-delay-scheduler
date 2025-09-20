@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:java="http://www.mulesoft.org/schema/mule/java"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/java http://www.mulesoft.org/schema/mule/java/current/mule-java.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<!-- HTTP listener config -->
+	<http:listener-config name="HTTP_Listener_config"
+		doc:name="HTTP Listener config"
+		doc:id="04d85db9-5888-48ed-ae1c-67a6cafd7a02">
+		<http:listener-connection host="0.0.0.0"
+			port="8081" />
+	</http:listener-config>
+
+	<!-- Flow that receives the incoming request, captures appid + timestamp, 
+		and schedules Java timer -->
+	<flow name="receiveFlow">
+		<http:listener path="/api/submit"
+			doc:name="HTTP Listener" config-ref="HTTP_Listener_config" />
+		<logger
+			message="Received request: #[payload] attrs: #[attributes]"
+			level="INFO" doc:name="Logger" />
+
+		<!-- capture appId from query param or payload -->
+		<ee:transform
+			doc:name="appId, timestampIso &amp; payloadJson"
+			doc:id="5badac61-3b19-43a5-8865-bcb66b9dca08">
+			<ee:message>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="appId"><![CDATA[%dw 2.0
+output text/plain
+---
+attributes.queryParams.appid]]></ee:set-variable>
+				<ee:set-variable variableName="timestampIso"><![CDATA[%dw 2.0
+output text/plain
+---
+now()]]></ee:set-variable>
+				<ee:set-variable variableName="payloadJson"><![CDATA[%dw 2.0
+output text/plain
+---
+write(payload, 'application/json')]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<java:invoke-static
+			class="com.example.timer.TimerManager"
+			method="schedule(java.lang.String, java.lang.String)">
+			<java:args><![CDATA[#[{
+	appId: vars.appId as String,
+	payloadJson: vars.payloadJson as String
+}]]]>
+    </java:args>
+		</java:invoke-static>
+		<ee:transform doc:name="Transform Message"
+			doc:id="f33a287d-a166-4c46-aa16-a31f51c039c2">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: "scheduled",
+	appId: vars.appId,
+	scheduledAt: vars.timestampIso
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	
+</flow>
+
+	<!-- Optional internal flow (only needed if Java posts back to Mule) -->
+	<flow name="internalProcessFlow">
+		<http:listener path="/api/internal/process"
+			doc:name="Internal Process Listener"
+			config-ref="HTTP_Listener_config" />
+		<logger
+			message="internalProcessFlow triggered for appid=#[attributes.queryParams.appid] payload: #[payload]"
+			level="INFO" doc:name="Logger" />
+		<ee:transform doc:name="Transform Message"
+			doc:id="9704bc2a-2f7b-4002-ae53-f3018678de4d">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	result: "done",
+	appId: attributes.queryParams.appid,
+	now: now()
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	
+</flow>
+	<flow name="auto-flow-trigger-with-java-classFlow" doc:id="e9937d5c-6e1d-45ee-8e1f-c001cdf7e6c8" >
+		<http:listener doc:name="Listener" doc:id="9828dde4-31b7-41c1-b27e-535b9bd38678" config-ref="HTTP_Listener_config" path="/api/cancel"/>
+		<java:invoke-static method="cancel(java.lang.String)" doc:name="Invoke static" doc:id="0fc2152d-a1fc-401c-bf12-f5e033844787" class="com.example.timer.TimerManager" >
+			<java:args ><![CDATA[#[{
+	appId: payload as String
+}]]]></java:args>
+		</java:invoke-static>
+		<ee:transform doc:name="Transform Message" doc:id="e4c0610a-f86c-48a3-871f-8acb9171acf4" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	payload: payload,
+	attributes: attributes
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="internalProcessFlow" doc:id="81decb20-7544-435f-b930-ad0b8fb561cf" message="internalProcessFlow #[payload]" />
+	</flow>
+
+
+</mule>
