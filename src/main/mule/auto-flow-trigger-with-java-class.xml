@@ -51,7 +51,7 @@ write(payload, 'application/json')]]></ee:set-variable>
 		</ee:transform>
 		<java:invoke-static
 			class="com.example.timer.TimerManager"
-			method="schedule(java.lang.String, java.lang.String)">
+			method="schedule(java.lang.String,java.lang.String)">
 			<java:args><![CDATA[#[{
 	appId: vars.appId as String,
 	payloadJson: vars.payloadJson as String
@@ -75,8 +75,44 @@ output application/json
 </flow>
 
 	<!-- Optional internal flow (only needed if Java posts back to Mule) -->
-	<flow name="internalProcessFlow">
-		<http:listener path="/api/internal/process"
+	<flow name="auto-flow-trigger-with-java-class-get-job-values" doc:id="4129212c-96c5-4c04-a2b9-0a4850de1332" >
+		<http:listener doc:name="Listener" doc:id="268935e3-9c2a-4eef-a867-f680527f2cc9" config-ref="HTTP_Listener_config" path="/api/get"/>
+		<java:invoke-static doc:name="Invoke static" doc:id="5e0a878c-3612-4162-b4d9-bc36b24cefa1" method="getPayload(java.lang.String)" class="com.example.timer.TimerManager">
+			<java:args ><![CDATA[#[{
+	appId: attributes.queryParams.appid as String
+}]]]></java:args>
+		</java:invoke-static>
+		<ee:transform doc:name="Transform Message" doc:id="770a7f55-b251-4ecd-9f7a-c80355bd84b8" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="auto-flow-trigger-with-java-class-cancel-job" doc:id="e9937d5c-6e1d-45ee-8e1f-c001cdf7e6c8">
+		<http:listener doc:name="Listener" doc:id="9828dde4-31b7-41c1-b27e-535b9bd38678" config-ref="HTTP_Listener_config" path="/api/cancel" />
+		<java:invoke-static method="cancel(java.lang.String)" doc:name="Invoke static" doc:id="0fc2152d-a1fc-401c-bf12-f5e033844787" class="com.example.timer.TimerManager">
+			<java:args><![CDATA[#[{
+	appId: payload as String
+}]]]></java:args>
+		</java:invoke-static>
+		<ee:transform doc:name="Transform Message" doc:id="e4c0610a-f86c-48a3-871f-8acb9171acf4">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	payload: payload,
+	attributes: attributes
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="internalProcessFlow" doc:id="81decb20-7544-435f-b930-ad0b8fb561cf" message="internalProcessFlow #[payload]" />
+	</flow>
+	<flow name="internalProcessFlow-dev">
+		<http:listener path="/test-dev"
 			doc:name="Internal Process Listener"
 			config-ref="HTTP_Listener_config" />
 		<logger
@@ -95,27 +131,25 @@ output application/json
 }]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="d472e54b-9d0c-49fa-94a6-4b6e34e6c737" message="#[payload]"/>
 	
 </flow>
-	<flow name="auto-flow-trigger-with-java-classFlow" doc:id="e9937d5c-6e1d-45ee-8e1f-c001cdf7e6c8" >
-		<http:listener doc:name="Listener" doc:id="9828dde4-31b7-41c1-b27e-535b9bd38678" config-ref="HTTP_Listener_config" path="/api/cancel"/>
-		<java:invoke-static method="cancel(java.lang.String)" doc:name="Invoke static" doc:id="0fc2152d-a1fc-401c-bf12-f5e033844787" class="com.example.timer.TimerManager" >
-			<java:args ><![CDATA[#[{
-	appId: payload as String
-}]]]></java:args>
-		</java:invoke-static>
-		<ee:transform doc:name="Transform Message" doc:id="e4c0610a-f86c-48a3-871f-8acb9171acf4" >
-			<ee:message >
-				<ee:set-payload ><![CDATA[%dw 2.0
+	<flow name="internalProcessFlow-qa" doc:id="0ded2c27-6730-44b8-8ffb-badc1bdffa8e">
+		<http:listener doc:name="Internal Process Listener" doc:id="effac60e-ced6-42b5-8c60-4a46bb5225bd" config-ref="HTTP_Listener_config" path="/test-qa" />
+		<logger level="INFO" doc:name="Logger" doc:id="c9990e73-5382-4d53-ace8-8747400f3904" message="internalProcessFlow triggered for appid=#[attributes.queryParams.appid] payload: #[payload]" />
+		<ee:transform doc:name="Transform Message" doc:id="8b0b16f6-2a19-446f-b07b-c11c895261e6">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
 output application/json
 ---
 {
-	payload: payload,
-	attributes: attributes
+	result: "done",
+	appId: attributes.queryParams.appid,
+	now: now()
 }]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
-		<logger level="INFO" doc:name="internalProcessFlow" doc:id="81decb20-7544-435f-b930-ad0b8fb561cf" message="internalProcessFlow #[payload]" />
+		<logger level="INFO" doc:name="Logger1" doc:id="33a454eb-a2dc-4890-b5c5-387312282d63" message="#[payload]" />
 	</flow>
 
 
